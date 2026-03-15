@@ -16,8 +16,15 @@
     .big{font-size:28px;font-weight:800}
     .muted{opacity:.8}
     .good{color:#49e68b}.warn{color:#ffd166}.bad{color:#ff6b6b}
-    .out{white-space:pre-wrap;margin-top:12px;padding:12px;border:1px solid #2b3d76;border-radius:8px;background:#10182e}
+    .out{margin-top:12px;padding:12px;border:1px solid #2b3d76;border-radius:8px;background:#10182e;line-height:1.5}
+    .out h1,.out h2,.out h3{margin:.5rem 0}
+    .out p{margin:.5rem 0}
+    .out ul,.out ol{padding-left:1.2rem}
+    .out code{background:#0b1328;padding:2px 5px;border-radius:6px}
+    .out pre{background:#0b1328;padding:10px;border-radius:8px;overflow:auto}
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 </head>
 <body>
   <h1>Fuel Stop Challenge</h1>
@@ -67,6 +74,15 @@
   const bestEl = document.getElementById('best');
   const resultEl = document.getElementById('result');
   const outEl = document.getElementById('out');
+
+  function renderMarkdown(md){
+    const raw = marked.parse(md || '');
+    return DOMPurify.sanitize(raw);
+  }
+
+  function setOutMarkdown(md){
+    outEl.innerHTML = renderMarkdown(md);
+  }
   const startBtn = document.getElementById('start');
   const stopBtn = document.getElementById('stop');
   const coachBtn = document.getElementById('coach');
@@ -87,7 +103,7 @@
     resultEl.className='muted';
     resultEl.textContent='New round ready.';
     coachBtn.disabled=true;
-    outEl.textContent='AI output appears here.';
+    setOutMarkdown('AI output appears here.');
   }
 
   function updateUI(){
@@ -145,7 +161,7 @@
 
   async function coach(){
     if(lastStopped==null) return;
-    outEl.textContent='Thinking...';
+    setOutMarkdown('Thinking...');
     const body = {
       target: parseFloat(targetEl.value).toFixed(2),
       stopped: Number(lastStopped).toFixed(2),
@@ -154,7 +170,8 @@
     };
     const r = await fetch('/api/coach',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d = await r.json();
-    outEl.textContent = r.ok ? (d.content||'(empty)') : `Error: ${d.error||'request failed'}`;
+    if (r.ok) setOutMarkdown(d.content||'(empty)');
+    else setOutMarkdown(`Error: ${d.error||'request failed'}`);
   }
 
   document.getElementById('newRound').onclick=setRound;
