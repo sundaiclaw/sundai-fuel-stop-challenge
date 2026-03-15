@@ -1,1 +1,167 @@
-<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Fuel Stop Challenge</title><style>body{font-family:system-ui;max-width:860px;margin:20px auto;padding:0 14px;background:#0b1020;color:#e8eeff}input,select{padding:8px;border-radius:8px;border:1px solid #2b3d76;background:#111938;color:#e8eeff}button{background:#5d85ff;color:#fff;border:0;padding:10px 14px;border-radius:8px;font-weight:700}.row{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}.out{white-space:pre-wrap;margin-top:12px;padding:12px;border:1px solid #2b3d76;border-radius:8px;background:#10182e}</style></head><body><h1>Fuel Stop Challenge</h1><p>Arcade gas-pump stop game + AI coach for your next attempt.</p><div class='row'><label>Target $ <input id='target' value='37.50'></label><label>Stopped $ <input id='stopped' value='37.62'></label><label>Streak <input id='streak' value='3'></label><label>Mode <select id='mode'><option>Arcade</option><option>Rush Hour</option><option>Rainy Day</option></select></label></div><button id='go'>Get AI Coach</button><div id='out' class='out'>Output appears here.</div><script>go.onclick=async()=>{out.textContent='Thinking...';const body={target:target.value,stopped:stopped.value,streak:streak.value,mode:mode.value};const r=await fetch('/api/coach',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();out.textContent=r.ok?(d.content||'(empty)'):`Error: ${d.error||'request failed'}`};</script></body></html>
+<!doctype html>
+<html>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width,initial-scale=1'>
+  <title>Fuel Stop Challenge</title>
+  <style>
+    body{font-family:system-ui;max-width:900px;margin:20px auto;padding:0 14px;background:#0b1020;color:#e8eeff}
+    .card{background:#10182e;border:1px solid #2b3d76;border-radius:12px;padding:14px;margin:10px 0}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    input,select{padding:8px;border-radius:8px;border:1px solid #2b3d76;background:#111938;color:#e8eeff}
+    button{background:#5d85ff;color:#fff;border:0;padding:10px 14px;border-radius:8px;font-weight:700;cursor:pointer}
+    button:disabled{opacity:.6;cursor:not-allowed}
+    .meter{height:22px;background:#111938;border:1px solid #2b3d76;border-radius:999px;overflow:hidden}
+    .fill{height:100%;width:0%;background:linear-gradient(90deg,#41d1ff,#5d85ff,#b074ff);transition:width .08s linear}
+    .big{font-size:28px;font-weight:800}
+    .muted{opacity:.8}
+    .good{color:#49e68b}.warn{color:#ffd166}.bad{color:#ff6b6b}
+    .out{white-space:pre-wrap;margin-top:12px;padding:12px;border:1px solid #2b3d76;border-radius:8px;background:#10182e}
+  </style>
+</head>
+<body>
+  <h1>Fuel Stop Challenge</h1>
+  <p>Stop the pump as close to target as possible. Then get AI coaching for your next round.</p>
+
+  <div class='card'>
+    <div class='row'>
+      <label>Mode
+        <select id='mode'>
+          <option>Arcade</option>
+          <option>Rush Hour</option>
+          <option>Rainy Day</option>
+        </select>
+      </label>
+      <label>Target $ <input id='target' value='37.50'></label>
+      <button id='newRound'>New Round</button>
+    </div>
+
+    <div style='margin-top:12px' class='meter'><div id='fill' class='fill'></div></div>
+    <div class='row' style='justify-content:space-between;margin-top:10px'>
+      <div class='big'>$<span id='current'>0.00</span></div>
+      <div>Streak: <b id='streak'>0</b></div>
+      <div>Best Δ: <b id='best'>--</b></div>
+    </div>
+
+    <div class='row' style='margin-top:10px'>
+      <button id='start'>Start Pump</button>
+      <button id='stop' disabled>Stop!</button>
+      <span id='result' class='muted'>Press Start to play.</span>
+    </div>
+  </div>
+
+  <div class='card'>
+    <div class='row'>
+      <button id='coach' disabled>Get AI Coach</button>
+      <span class='muted'>AI explains your score + gives next challenge modifier.</span>
+    </div>
+    <div id='out' class='out'>AI output appears here.</div>
+  </div>
+
+<script>
+  const targetEl = document.getElementById('target');
+  const modeEl = document.getElementById('mode');
+  const fillEl = document.getElementById('fill');
+  const currentEl = document.getElementById('current');
+  const streakEl = document.getElementById('streak');
+  const bestEl = document.getElementById('best');
+  const resultEl = document.getElementById('result');
+  const outEl = document.getElementById('out');
+  const startBtn = document.getElementById('start');
+  const stopBtn = document.getElementById('stop');
+  const coachBtn = document.getElementById('coach');
+
+  let running=false, timer=null, value=0, speed=0.22, streak=0, bestDelta=null, lastStopped=null;
+
+  function modeMultiplier(){
+    const m = modeEl.value;
+    if(m==='Rush Hour') return 1.35;
+    if(m==='Rainy Day') return 1.15;
+    return 1.0;
+  }
+
+  function setRound(){
+    const base = 20 + Math.random()*40;
+    targetEl.value = base.toFixed(2);
+    value=0; updateUI();
+    resultEl.className='muted';
+    resultEl.textContent='New round ready.';
+    coachBtn.disabled=true;
+    outEl.textContent='AI output appears here.';
+  }
+
+  function updateUI(){
+    currentEl.textContent = value.toFixed(2);
+    const pct = Math.min(100,(value/80)*100);
+    fillEl.style.width = pct+'%';
+    streakEl.textContent = streak;
+    bestEl.textContent = bestDelta==null?'--':bestDelta.toFixed(2);
+  }
+
+  function startPump(){
+    if(running) return;
+    running=true;
+    startBtn.disabled=true;
+    stopBtn.disabled=false;
+    coachBtn.disabled=true;
+    value=0;
+    const mult = modeMultiplier();
+    speed = (0.16 + Math.random()*0.18)*mult;
+    timer=setInterval(()=>{
+      value += speed;
+      speed += 0.002*mult;
+      updateUI();
+      if(value>=80){ stopPump(true); }
+    },70);
+    resultEl.className='muted';
+    resultEl.textContent='Pump running... stop at target!';
+  }
+
+  function stopPump(timeout=false){
+    if(!running) return;
+    running=false;
+    clearInterval(timer);
+    startBtn.disabled=false;
+    stopBtn.disabled=true;
+
+    const target = parseFloat(targetEl.value||'0');
+    lastStopped = parseFloat(value.toFixed(2));
+    const delta = Math.abs(lastStopped-target);
+    const perfect = delta<=0.03;
+    const good = delta<=0.15;
+
+    if(perfect){ streak += 2; resultEl.className='good'; }
+    else if(good){ streak += 1; resultEl.className='warn'; }
+    else { streak = 0; resultEl.className='bad'; }
+
+    if(bestDelta==null || delta<bestDelta) bestDelta=delta;
+
+    if(timeout){ resultEl.className='bad'; resultEl.textContent=`Overfill! You hit $${lastStopped.toFixed(2)}.`; }
+    else resultEl.textContent = `Target $${target.toFixed(2)} | Stopped $${lastStopped.toFixed(2)} | Δ ${delta.toFixed(2)}`;
+
+    coachBtn.disabled=false;
+    updateUI();
+  }
+
+  async function coach(){
+    if(lastStopped==null) return;
+    outEl.textContent='Thinking...';
+    const body = {
+      target: parseFloat(targetEl.value).toFixed(2),
+      stopped: Number(lastStopped).toFixed(2),
+      streak: String(streak),
+      mode: modeEl.value
+    };
+    const r = await fetch('/api/coach',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d = await r.json();
+    outEl.textContent = r.ok ? (d.content||'(empty)') : `Error: ${d.error||'request failed'}`;
+  }
+
+  document.getElementById('newRound').onclick=setRound;
+  startBtn.onclick=startPump;
+  stopBtn.onclick=()=>stopPump(false);
+  coachBtn.onclick=coach;
+  setRound();
+</script>
+</body>
+</html>
