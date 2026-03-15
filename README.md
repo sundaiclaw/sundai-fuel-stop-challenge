@@ -22,4 +22,4 @@ A gas-pump precision game companion that uses AI to explain your round and sugge
 - Single-player only in current version.
 
 Build on Sundai Club on March 15, 2026  
-Sundai Project: TO_BE_FILLED
+Sundai Project: https://www.sundai.club/projects/2609e3ae-f727-4f06-b45b-337c6fbdf30c
